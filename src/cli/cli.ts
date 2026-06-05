@@ -1,12 +1,15 @@
 import { scanProject } from "../scanner/scanner";
+import { extractAllRoutes } from "../extractor/extractor";
 
 export function runCLI(): void {
-  const result = scanProject("./sample-project");
+  const scanResult = scanProject("./sample-project");
 
-  console.log("\n--- Scan Result ---");
-  console.log("Directory:", result.scannedDirectory);
-  console.log("Files found:", result.totalFound);
-  result.controllerFiles.forEach(file => {
-    console.log(" -", file);
+  const routes = extractAllRoutes(scanResult.controllerFiles);
+
+  console.log("\n--- Extracted Routes ---");
+  console.log(`Total routes found: ${routes.length}\n`);
+
+  routes.forEach(route => {
+    console.log(`${route.method.padEnd(7)} ${route.path.padEnd(25)} → ${route.handler}`);
   });
 }
