@@ -5,7 +5,7 @@ export interface Route{
     method: string;
     path:string;
     handler:string;
-    controllerFiles:string;
+    controllerFile:string;
 }
 
 export interface ExtractionResult{
@@ -40,7 +40,7 @@ export function extractRoutes(controllerFilePath:string):ExtractionResult{
             method:match[2].toUpperCase(),
             path:match[3],
             handler:match[4],
-            controllerFiles:controllerFilePath
+            controllerFile:controllerFilePath
         }
         routes.push(route)
         logInfo(`   ${route.method} ${route.path} -> ${route.handler}`)

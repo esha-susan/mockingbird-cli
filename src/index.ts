@@ -1,6 +1,9 @@
-import dotenv from "dotenv"
+import dotenv from "dotenv";
+dotenv.config();
 
-dotenv.config()
+import { runCLI } from "./cli/cli";
 
-import {runCLI} from "./cli/cli";
-runCLI();
+runCLI().catch(error => {
+  console.error("Fatal error:", error.message);
+  process.exit(1);
+});

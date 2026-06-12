@@ -1,15 +1,23 @@
 import { scanProject } from "../scanner/scanner";
 import { extractAllRoutes } from "../extractor/extractor";
+import { generateAllTests } from "../generator/generator";
+import { writeAllTestFiles } from "../writer/writer";
 
-export function runCLI(): void {
+export async function runCLI(): Promise<void> {
   const scanResult = scanProject("./sample-project");
 
   const routes = extractAllRoutes(scanResult.controllerFiles);
 
-  console.log("\n--- Extracted Routes ---");
-  console.log(`Total routes found: ${routes.length}\n`);
+  console.log("\nGenerating tests with Gemini AI...");
+  const generationResults = await generateAllTests(routes);
 
-  routes.forEach(route => {
-    console.log(`${route.method.padEnd(7)} ${route.path.padEnd(25)} → ${route.handler}`);
+  console.log("\nWriting test files...");
+  const writeResults = await writeAllTestFiles(generationResults);
+
+  // Print summary
+  console.log("\n--- Write Results ---");
+  writeResults.forEach(result => {
+    const status = result.success ? "✓" : "✗";
+    console.log(`${status} ${result.outputPath} (${result.linesWritten} lines)`);
   });
 }
