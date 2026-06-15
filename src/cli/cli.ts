@@ -2,8 +2,11 @@ import { scanProject } from "../scanner/scanner";
 import { extractAllRoutes } from "../extractor/extractor";
 import { generateAllTests } from "../generator/generator";
 import { writeAllTestFiles } from "../writer/writer";
+import { printReport } from "../reporter/reporter";
 
 export async function runCLI(): Promise<void> {
+  const startTime = Date.now();
+
   const scanResult = scanProject("./sample-project");
 
   const routes = extractAllRoutes(scanResult.controllerFiles);
@@ -14,10 +17,14 @@ export async function runCLI(): Promise<void> {
   console.log("\nWriting test files...");
   const writeResults = await writeAllTestFiles(generationResults);
 
-  // Print summary
-  console.log("\n--- Write Results ---");
-  writeResults.forEach(result => {
-    const status = result.success ? "✓" : "✗";
-    console.log(`${status} ${result.outputPath} (${result.linesWritten} lines)`);
+  const endTime = Date.now();
+
+  printReport({
+    scanResult,
+    routes,
+    generationResults,
+    writeResults,
+    startTime,
+    endTime
   });
 }
