@@ -5,6 +5,7 @@ import { generateAllTests } from "../generator/generator";
 import { writeAllTestFiles } from "../writer/writer";
 import { printReport } from "../reporter/reporter";
 import { logError, logHeader } from "../utils/logger";
+import { runInit } from "./init";
 
 export function runCLI(): void {
   const program = new Command();
@@ -13,6 +14,13 @@ export function runCLI(): void {
     .name("mockingbird")
     .description("AI-powered Jest test generator for Express.js APIs")
     .version("1.0.0");
+
+  program
+    .command("init")
+    .description("Set up your Gemini API key for Mockingbird")
+    .action(async () => {
+      await runInit();
+    });
 
   program
     .command("run")
@@ -49,7 +57,6 @@ async function handleRunCommand(projectPath: string, outputDir: string): Promise
     console.log("\nGenerating tests with Gemini AI...");
     const generationResults = await generateAllTests(routes);
 
-    
     console.log("\nWriting test files...");
     const writeResults = await writeAllTestFiles(generationResults, outputDir);
 

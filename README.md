@@ -76,25 +76,60 @@ Your target Express.js project should have:
 
 ## Installation
 
-### Option 1 — Install globally from npm (recommended)
+### Install globally from npm
 
 ```bash
-npm install -g mockingbird-cli
-```
-
-### Option 2 — Clone and run locally
-
-```bash
-git clone https://github.com/yourusername/mockingbird-cli.git
-cd mockingbird-cli
-npm install
-npm run build
-npm link
+npm install -g @esha_susan/mockingbird-cli
 ```
 
 ---
 
-## Configuration
+## Getting Started
+
+### Step 1 — Install globally
+```bash
+npm install -g @esha_susan/mockingbird-cli
+```
+
+### Step 2 — Set up your API key
+Navigate to your project directory first, then run:
+```bash
+cd your-express-project
+mockingbird init
+```
+This creates or updates a `.env` file in your current directory with your Gemini API key.
+
+> ⚠️ If your project already has a `.env` file, Mockingbird will safely **append** the key to it — your existing secrets (database passwords, JWT keys, etc.) are never touched or overwritten.
+
+### Step 3 — Generate tests
+```bash
+mockingbird run .
+```
+
+That's it. Your generated test files will appear in `tests/generated/` inside your project.
+
+---
+
+## Commands
+
+### `mockingbird init`
+Set up your Gemini API key. Run this once before using the tool.
+```bash
+mockingbird init
+```
+
+### `mockingbird run <projectPath>`
+Scan a project and generate Jest tests for all detected API routes.
+```bash
+# Scan current directory
+mockingbird run .
+
+# Scan a specific path
+mockingbird run ./my-express-api
+
+# Custom output directory
+mockingbird run ./my-express-api --output ./tests/ai-generated
+```
 
 Create a `.env` file in your **Mockingbird** directory (not your target project):
 
