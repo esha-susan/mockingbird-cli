@@ -143,7 +143,7 @@ function groupRoutesByController(routes: Route[]): Map<string, Route[]> {
 }
 
 // Removes markdown code fences AI sometimes adds despite instructions
-function cleanGeneratedCode(code: string): string {
+ export function cleanGeneratedCode(code: string): string {
   return code
     .replace(/```typescript/gi, "")
     .replace(/```ts/gi, "")

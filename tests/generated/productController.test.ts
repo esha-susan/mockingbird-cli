@@ -1,215 +1,175 @@
 import request from 'supertest';
 import app from '../app';
 
-// Declare a variable to store a product ID created during tests.
-// This ensures that subsequent tests (like GET /products/:id) have a valid ID to work with.
-let createdProductId: string;
+// Helper to generate a UUID for testing purposes (real projects would use a library like 'uuid')
+const generateUuid = () =>
+  'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function (c) {
+    const r = (Math.random() * 16) | 0,
+      v = c == 'x' ? r : (r & 0x3) | 0x8;
+    return v.toString(16);
+  });
 
 describe('Product API Integration Tests', () => {
-  // Global setup/teardown for the entire test suite.
-  // In a real application, you might connect to a dedicated test database here,
-  // ensure it's clean, and seed initial data if necessary for all tests.
-  beforeAll(async () => {
-    // Example: await db.connectToTestDatabase();
-    // Example: await db.clearAllCollections(); // Clear all data before tests
-  });
+  // Store a product ID created during tests to be used in subsequent tests (e.g., GET by ID)
+  let createdProductId: string;
 
-  afterAll(async () => {
-    // Example: await db.disconnectTestDatabase(); // Disconnect from test database
-    // Example: await db.clearAllCollections(); // Optional: clean up after all tests
-  });
+  // Common test product data
+  const testProduct = {
+    name: 'Integration Test Product',
+    description: 'A product used for integration testing purposes.',
+    price: 49.99,
+    stock: 50,
+  };
 
-  describe('POST /products', () => {
-    const validProductPayload = {
-      name: 'Integration Test Product',
-      price: 19.99,
-      description: 'A product specifically for integration testing purposes.',
-    };
+  const anotherTestProduct = {
+    name: 'Another Integration Product',
+    description: 'A second product for list testing.',
+    price: 12.34,
+    stock: 200,
+  };
 
-    it('should create a new product (201 Created)', async () => {
-      const res = await request(app)
-        .post('/products')
-        .send(validProductPayload);
-
-      expect(res.statusCode).toEqual(201);
-      expect(res.body).toHaveProperty('id');
-      expect(res.body).toHaveProperty('name', validProductPayload.name);
-      expect(res.body).toHaveProperty('price', validProductPayload.price);
-      expect(res.body).toHaveProperty(
-        'description',
-        validProductPayload.description
-      );
-      expect(typeof res.body.id).toBe('string'); // Assuming IDs are strings (e.g., UUIDs)
-
-      // Store the ID for use in other tests
-      createdProductId = res.body.id;
-    });
-
-    it('should return 400 if product name is missing', async () => {
-      const invalidProduct = { price: 9.99, description: 'Missing name' };
-      const res = await request(app).post('/products').send(invalidProduct);
-
-      expect(res.statusCode).toEqual(400);
-      expect(res.body).toHaveProperty('message');
-      expect(res.body.message).toContain('name is required'); // Assuming specific validation message
-    });
-
-    it('should return 400 if product price is missing', async () => {
-      const invalidProduct = {
-        name: 'No Price Product',
-        description: 'Missing price',
-      };
-      const res = await request(app).post('/products').send(invalidProduct);
-
-      expect(res.statusCode).toEqual(400);
-      expect(res.body).toHaveProperty('message');
-      expect(res.body.message).toContain('price is required');
-    });
-
-    it('should return 400 if product price is not a valid number', async () => {
-      const invalidProduct = {
-        name: 'Invalid Price Product',
-        price: 'not-a-number',
-        description: 'Price should be numeric',
-      };
-      const res = await request(app).post('/products').send(invalidProduct);
-
-      expect(res.statusCode).toEqual(400);
-      expect(res.body).toHaveProperty('message');
-      expect(res.body.message).toContain('price must be a number');
-    });
-
-    it('should return 409 if a product with the same name already exists (if unique constraint enforced)', async () => {
-      // First, create a product with a specific unique name
-      const uniqueNameProduct = {
-        name: 'Unique Product for Conflict Test',
-        price: 100.0,
-      };
-      await request(app).post('/products').send(uniqueNameProduct);
-
-      // Then, try to create another product with the exact same unique name
-      const res = await request(app).post('/products').send(uniqueNameProduct); // Send the same product again
-
-      // The status code can vary: 409 Conflict is ideal for unique constraints,
-      // but some APIs might return 400 Bad Request or even 500 Internal Server Error
-      // if not explicitly handled. We'll test for a range indicating a client-side error.
-      expect(res.statusCode).toBeGreaterThanOrEqual(400);
-      expect(res.statusCode).toBeLessThan(500); // Should not be a 5xx server error if handled
-      if (res.statusCode === 409) {
-        expect(res.body).toHaveProperty(
-          'message',
-          expect.stringContaining('already exists')
-        );
-      } else if (res.statusCode === 400) {
-        expect(res.body).toHaveProperty(
-          'message',
-          expect.stringContaining('duplicate key') ||
-            expect.stringContaining('unique')
-        );
-      }
-    });
-  });
+  // Helper function to create a product, useful for setting up test data
+  const createProductHelper = async (productData: any) => {
+    const response = await request(app).post('/products').send(productData);
+    expect(response.statusCode).toBe(201);
+    expect(response.body).toHaveProperty('id');
+    return response.body.id;
+  };
 
   describe('GET /products', () => {
-    // Before running GET /products tests, ensure there's at least one product in the system
-    // (either from the POST test or by creating a new one if POST failed/was skipped).
+    // Before running these tests, ensure some products exist in the database
     beforeAll(async () => {
-      if (!createdProductId) {
-        const res = await request(app)
-          .post('/products')
-          .send({
-            name: 'Baseline Product For Listing',
-            price: 50.0,
-            description: 'Created for GET /products test',
-          });
-        createdProductId = res.body.id; // Ensure createdProductId is set
-      }
+      await createProductHelper(testProduct);
+      await createProductHelper(anotherTestProduct);
     });
 
-    it('should return a list of products (200 OK)', async () => {
-      const res = await request(app).get('/products');
+    it('should return an array of products with status 200', async () => {
+      const response = await request(app).get('/products');
 
-      expect(res.statusCode).toEqual(200);
-      expect(res.body).toBeInstanceOf(Array);
-      expect(res.body.length).toBeGreaterThan(0); // We expect at least one product from setup
-      expect(res.body[0]).toHaveProperty('id');
-      expect(res.body[0]).toHaveProperty('name');
-      expect(res.body[0]).toHaveProperty('price');
-      expect(typeof res.body[0].id).toBe('string');
-      expect(typeof res.body[0].name).toBe('string');
-      expect(typeof res.body[0].price).toBe('number');
+      expect(response.statusCode).toBe(200);
+      expect(Array.isArray(response.body)).toBe(true);
+      expect(response.body.length).toBeGreaterThanOrEqual(2); // Should have at least the two products created in beforeAll
+      expect(response.body[0]).toHaveProperty('id');
+      expect(response.body[0]).toHaveProperty('name');
+      expect(response.body[0]).toHaveProperty('price');
     });
 
-    it('should return an empty array if no products exist (200 OK - edge case)', async () => {
-      // This test is challenging for true integration tests without direct DB access to clear products.
-      // A robust test would involve clearing the test database entirely before this specific test.
-      // For demonstration purposes, we'll assert the response structure remains an array.
-      // If the controller truly returned an empty list, it would still be 200.
-      const res = await request(app).get('/products');
+    it('should return an empty array if no products exist (edge case, assuming database cleanup for specific test)', async () => {
+      // This test is hard to run reliably in a shared test environment without explicit database cleanup/rollback.
+      // For a real scenario, you'd need a clean database or mock the data source to return an empty array.
+      // Given products are created in beforeAll, this specific test will likely return a non-empty array.
+      // The assertion here is for the structure of the response (an array), which is always valid for GET /products.
+      const response = await request(app).get('/products');
 
-      expect(res.statusCode).toEqual(200);
-      expect(res.body).toBeInstanceOf(Array);
-      // We can't assert length === 0 here unless we explicitly clear the DB before this specific test.
-      // The main point is to ensure it's always an array.
+      expect(response.statusCode).toBe(200);
+      expect(Array.isArray(response.body)).toBe(true);
+      // To truly test for an *empty* array, the database state must be explicitly cleared for this test.
     });
-
-    // A more direct 'error' case (like 500 Internal Server Error) for GET /products is hard to trigger reliably
-    // in an integration test without mocking underlying dependencies or inducing a server crash.
-    // Thus, focusing on expected successful behaviors and array structure is more practical here.
   });
 
   describe('GET /products/:id', () => {
-    let testProductId: string;
-
-    // Ensure a product exists for fetching by ID before this suite runs
+    // Before all tests in this describe block, create a product to ensure we have a valid ID
     beforeAll(async () => {
-      // Use the ID from the POST test, or create a new one if 'createdProductId' wasn't set (e.g., if POST tests were skipped/failed)
-      if (createdProductId) {
-        testProductId = createdProductId;
-      } else {
-        const res = await request(app)
-          .post('/products')
-          .send({
-            name: 'Product for ID Lookup',
-            price: 45.0,
-            description: 'Specific product for GET by ID',
-          });
-        testProductId = res.body.id;
-      }
+      createdProductId = await createProductHelper(testProduct);
     });
 
-    it('should return a specific product by ID (200 OK)', async () => {
-      const res = await request(app).get(`/products/${testProductId}`);
+    it('should return a single product by ID with status 200', async () => {
+      const response = await request(app).get(`/products/${createdProductId}`);
 
-      expect(res.statusCode).toEqual(200);
-      expect(res.body).toHaveProperty('id', testProductId);
-      expect(res.body).toHaveProperty('name', expect.any(String));
-      expect(res.body).toHaveProperty('price', expect.any(Number));
-      expect(res.body).toHaveProperty('description', expect.any(String));
+      expect(response.statusCode).toBe(200);
+      expect(response.body).toHaveProperty('id', createdProductId);
+      expect(response.body).toHaveProperty('name', testProduct.name);
+      expect(response.body).toHaveProperty(
+        'description',
+        testProduct.description
+      );
+      expect(response.body).toHaveProperty('price', testProduct.price);
+      expect(response.body).toHaveProperty('stock', testProduct.stock);
     });
 
-    it('should return 404 if product with ID is not found', async () => {
-      // Use an ID that is unlikely to exist but is well-formed (e.g., a valid UUID format but not in DB)
-      const nonExistentId = 'aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee'; // Example non-existent UUID
-      const res = await request(app).get(`/products/${nonExistentId}`);
+    it('should return 404 if product ID is not found', async () => {
+      const nonExistentId = generateUuid(); // Use a UUID that definitely doesn't exist
+      const response = await request(app).get(`/products/${nonExistentId}`);
 
-      expect(res.statusCode).toEqual(404);
-      expect(res.body).toHaveProperty('message', expect.any(String));
-      expect(res.body.message).toContain('Product not found');
+      expect(response.statusCode).toBe(404);
+      expect(response.body).toHaveProperty(
+        'message',
+        `Product with id ${nonExistentId} not found`
+      );
     });
 
-    it('should return 400 for an invalid product ID format', async () => {
-      // Assuming IDs are expected to be in a specific format (e.g., UUID).
-      // If the ID parameter validation is in place (e.g., via middleware), it should return 400.
-      const malformedId = '123-abc-def-456'; // Example of an ID that's not a valid UUID format
-      const res = await request(app).get(`/products/${malformedId}`);
+    it('should return 400 if product ID format is invalid', async () => {
+      const invalidId = 'not-a-valid-uuid-string';
+      const response = await request(app).get(`/products/${invalidId}`);
 
-      // If the Express route or middleware validates the ID format (e.g., using a regex for UUIDs),
-      // it should return 400 Bad Request. If it just passes to a DB query that returns null,
-      // it might result in 404 Not Found. We'll test for 400 as a robust validation check.
-      expect(res.statusCode).toEqual(400);
-      expect(res.body).toHaveProperty('message', expect.any(String));
-      expect(res.body.message).toContain('Invalid product ID format');
+      expect(response.statusCode).toBe(400);
+      expect(response.body).toHaveProperty(
+        'message',
+        'Invalid product ID format'
+      );
+    });
+  });
+
+  describe('POST /products', () => {
+    const newProductData = {
+      name: 'Newly Created Product',
+      description: 'This product is created via a successful POST request.',
+      price: 75.0,
+      stock: 300,
+    };
+
+    it('should create a new product and return 201 Created', async () => {
+      const response = await request(app)
+        .post('/products')
+        .send(newProductData);
+
+      expect(response.statusCode).toBe(201);
+      expect(response.body).toHaveProperty('id');
+      expect(typeof response.body.id).toBe('string');
+      expect(response.body.name).toBe(newProductData.name);
+      expect(response.body.description).toBe(newProductData.description);
+      expect(response.body.price).toBe(newProductData.price);
+      expect(response.body.stock).toBe(newProductData.stock);
+
+      // Verify the product can be fetched by its new ID
+      const getResponse = await request(app).get(
+        `/products/${response.body.id}`
+      );
+      expect(getResponse.statusCode).toBe(200);
+      expect(getResponse.body.name).toBe(newProductData.name);
+    });
+
+    it('should return 400 Bad Request if required fields are missing', async () => {
+      const productWithoutName = {
+        description: 'Missing name field.',
+        price: 10.0,
+        stock: 10,
+      };
+
+      const response = await request(app)
+        .post('/products')
+        .send(productWithoutName);
+
+      expect(response.statusCode).toBe(400);
+      expect(response.body).toHaveProperty('message');
+      expect(response.body.message).toContain('name is required'); // Expect specific validation message
+    });
+
+    it('should return 400 Bad Request if data types are invalid', async () => {
+      const productWithInvalidPrice = {
+        name: 'Invalid Price Product',
+        description: 'Price should be a number.',
+        price: 'not-a-number', // Invalid type
+        stock: 50,
+      };
+
+      const response = await request(app)
+        .post('/products')
+        .send(productWithInvalidPrice);
+
+      expect(response.statusCode).toBe(400);
+      expect(response.body).toHaveProperty('message');
+      expect(response.body.message).toContain('price must be a number'); // Expect specific validation message
     });
   });
 });

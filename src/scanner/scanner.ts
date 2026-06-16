@@ -80,7 +80,7 @@ function walkDirectory(currentPath:string,results:string[]):void{
     }
 }
 }
-function isControllerFile(fileName:string):boolean{
+export function isControllerFile(fileName:string):boolean{
     return CONTROLLER_PATTERNS.some(pattern=>
         fileName.toLowerCase().endsWith(pattern.toLocaleLowerCase())
     )

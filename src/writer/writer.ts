@@ -78,7 +78,7 @@ export async function writeAllTestFiles(
   return writeResults;
 }
 
-function buildOutputPath(controllerFilePath: string, outputDir: string): string {
+ export function buildOutputPath(controllerFilePath: string, outputDir: string): string {
   const fileName = path.basename(controllerFilePath);
 
   const baseName = fileName.replace(".ts", "").replace(".js", "");

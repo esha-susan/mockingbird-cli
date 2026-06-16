@@ -16,6 +16,23 @@ export interface ExtractionResult{
 
 const ROUTE_PATTERN=/(router|app)\.(get|post|put|delete|patch)\s*\(\s*['"`]([^'"`]+)['"`]\s*,\s*(?:\w+\s*,\s*)*(\w+)\s*\)/gi;
 
+// Pure function — takes code as a string, returns routes
+// No file system access — easy to test
+export function parseRoutesFromCode(code: string, controllerFile: string = "unknown"): Route[] {
+    const routes: Route[] = [];
+    const matches = code.matchAll(ROUTE_PATTERN);
+  
+    for (const match of matches) {
+      routes.push({
+        method: match[2].toUpperCase(),
+        path: match[3],
+        handler: match[4],
+        controllerFile
+      });
+    }
+  
+    return routes;
+  }
 export function extractRoutes(controllerFilePath:string):ExtractionResult{
 
     let fileContent:string
@@ -32,19 +49,12 @@ export function extractRoutes(controllerFilePath:string):ExtractionResult{
     }
     logInfo(`Extracting routes from ${controllerFilePath}`)
 
-    const routes:Route[]=[];
-    const matches=fileContent.matchAll(ROUTE_PATTERN)
+    // Use the pure function for the actual parsing
+  const routes = parseRoutesFromCode(fileContent, controllerFilePath);
 
-    for(const match of matches){
-        const route:Route={
-            method:match[2].toUpperCase(),
-            path:match[3],
-            handler:match[4],
-            controllerFile:controllerFilePath
-        }
-        routes.push(route)
-        logInfo(`   ${route.method} ${route.path} -> ${route.handler}`)
-    }
+  routes.forEach(route => {
+    logInfo(`  ${route.method} ${route.path} → ${route.handler}`);
+  });
     if (routes.length==0){
         logWarning(`  No routes found in: ${controllerFilePath}`);
     }

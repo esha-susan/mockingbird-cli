@@ -1,275 +1,253 @@
 import request from 'supertest';
-import app from '../app'; // Assuming app is the express instance
+import app from '../app'; // Assuming app.ts exports the Express app
 
-// Helper to generate unique emails for tests to avoid conflicts
-const generateUniqueEmail = () =>
-  `testuser_${Date.now()}_${Math.random().toString(36).substring(2, 15)}@example.com`;
+// Variables to store user IDs for subsequent tests
+let createdUserId: string;
+let anotherUserId: string;
 
 describe('User API Integration Tests', () => {
-  // Common test data template
-  const baseUserPayload = {
-    name: 'Test User',
-    password: 'securePassword123',
-  };
+  // ---------------------------------------------------------------------------------
+  // POST /users
+  // ---------------------------------------------------------------------------------
+  describe('POST /users', () => {
+    const newUser = {
+      name: 'Test User',
+      email: 'testuser@example.com',
+      password: 'password123',
+    };
 
+    it('should create a new user successfully', async () => {
+      const res = await request(app).post('/users').send(newUser);
+
+      expect(res.statusCode).toBe(201);
+      expect(res.body).toHaveProperty('id');
+      expect(res.body.name).toBe(newUser.name);
+      expect(res.body.email).toBe(newUser.email);
+      expect(res.body).not.toHaveProperty('password'); // Password should not be returned
+      expect(res.body).toHaveProperty('createdAt');
+      expect(res.body).toHaveProperty('updatedAt');
+
+      createdUserId = res.body.id; // Store ID for other tests
+    });
+
+    it('should return 400 if required fields are missing', async () => {
+      const invalidUser = {
+        name: 'Invalid User',
+        // email is missing
+        password: 'password123',
+      };
+
+      const res = await request(app).post('/users').send(invalidUser);
+
+      expect(res.statusCode).toBe(400);
+      expect(res.body).toHaveProperty('message');
+      expect(res.body.message).toMatch(/email is required/i);
+    });
+
+    it('should return 400 if email is already registered', async () => {
+      // Use the same email as the user created above
+      const duplicateUser = {
+        name: 'Duplicate User',
+        email: 'testuser@example.com', // Duplicate email
+        password: 'anotherpassword',
+      };
+
+      const res = await request(app).post('/users').send(duplicateUser);
+
+      expect(res.statusCode).toBe(400); // Or 409 Conflict, depending on backend
+      expect(res.body).toHaveProperty('message');
+      expect(res.body.message).toMatch(/email already exists/i);
+    });
+  });
+
+  // ---------------------------------------------------------------------------------
+  // GET /users
+  // ---------------------------------------------------------------------------------
   describe('GET /users', () => {
-    it('should return an array of users successfully', async () => {
-      // Create a user to ensure at least one user exists for this test,
-      // and clean up afterwards.
-      const uniqueEmail = generateUniqueEmail();
-      const tempUserPayload = { ...baseUserPayload, email: uniqueEmail };
-      const createRes = await request(app).post('/users').send(tempUserPayload);
-      const tempUserId = createRes.body.id;
+    // Create another user to ensure the list has more than one
+    beforeAll(async () => {
+      const res = await request(app).post('/users').send({
+        name: 'Another User',
+        email: 'anotheruser@example.com',
+        password: 'password456',
+      });
+      anotherUserId = res.body.id;
+    });
 
+    it('should return an array of all users', async () => {
       const res = await request(app).get('/users');
-      expect(res.statusCode).toEqual(200);
+
+      expect(res.statusCode).toBe(200);
       expect(Array.isArray(res.body)).toBe(true);
-      expect(res.body.length).toBeGreaterThanOrEqual(1); // At least the one we just created
+      expect(res.body.length).toBeGreaterThanOrEqual(2); // At least the two we created
       expect(res.body[0]).toHaveProperty('id');
       expect(res.body[0]).toHaveProperty('name');
       expect(res.body[0]).toHaveProperty('email');
-      expect(res.body[0]).not.toHaveProperty('password'); // Password should not be returned
-
-      // Clean up the temporary user
-      await request(app).delete(`/users/${tempUserId}`);
+      expect(res.body[0]).not.toHaveProperty('password');
     });
 
-    it('should return an empty array if no users exist (edge case - assuming a clean DB or no users)', async () => {
-      // This test is highly dependent on database state management.
-      // For a truly isolated test, a test DB would be cleared beforehand.
-      // Assuming for this scenario that if the DB *happens* to be empty, it responds correctly.
-      // If users are always present, this test might need mocking the data layer or a specific setup.
+    it('should return an empty array if no users exist (edge case, assuming clean state)', async () => {
+      // This test is harder to isolate without database cleanup before this specific describe.
+      // A simpler edge case for now: ensure it's always an array.
       const res = await request(app).get('/users');
-      expect(res.statusCode).toEqual(200);
       expect(Array.isArray(res.body)).toBe(true);
-      // We cannot guarantee the DB is empty, so we just check it's an array.
-      // If a specific setup could guarantee an empty DB, we'd add:
-      // expect(res.body.length).toEqual(0);
     });
   });
 
-  describe('POST /users', () => {
-    let createdUserId: string;
-
-    afterEach(async () => {
-      // Clean up the user created in successful POST tests
-      if (createdUserId) {
-        await request(app).delete(`/users/${createdUserId}`);
-        createdUserId = null as any; // Clear the ID for next test
-      }
-    });
-
-    it('should create a new user successfully with status 201', async () => {
-      const uniqueEmail = generateUniqueEmail();
-      const payload = { ...baseUserPayload, email: uniqueEmail };
-
-      const res = await request(app).post('/users').send(payload);
-
-      expect(res.statusCode).toEqual(201);
-      expect(res.body).toHaveProperty('id');
-      expect(res.body.name).toEqual(payload.name);
-      expect(res.body.email).toEqual(payload.email);
-      expect(res.body).not.toHaveProperty('password'); // Password should not be returned
-
-      createdUserId = res.body.id; // Store for cleanup
-    });
-
-    it('should return 400 if required fields are missing (e.g., email)', async () => {
-      const invalidPayload = {
-        name: 'Missing Email User',
-        password: 'password123',
-      }; // Missing email
-
-      const res = await request(app).post('/users').send(invalidPayload);
-
-      expect(res.statusCode).toEqual(400);
-      expect(res.body).toHaveProperty('message');
-      expect(res.body.message).toContain('email is required');
-    });
-
-    it('should return 409 if user with email already exists', async () => {
-      const uniqueEmail = generateUniqueEmail();
-      const payload = { ...baseUserPayload, email: uniqueEmail };
-
-      // First, create the user
-      await request(app).post('/users').send(payload);
-
-      // Then, try to create another user with the same email
-      const res = await request(app).post('/users').send(payload);
-
-      expect(res.statusCode).toEqual(409); // Conflict
-      expect(res.body).toHaveProperty(
-        'message',
-        'User with this email already exists'
-      );
-
-      // Clean up the first user
-      const getRes = await request(app).get(`/users`);
-      const existingUser = getRes.body.find(
-        (user: any) => user.email === uniqueEmail
-      );
-      if (existingUser) {
-        await request(app).delete(`/users/${existingUser.id}`);
-      }
-    });
-  });
-
+  // ---------------------------------------------------------------------------------
+  // GET /users/:id
+  // ---------------------------------------------------------------------------------
   describe('GET /users/:id', () => {
-    let userIdForGet: string;
-    const userToCreate = {
-      name: 'User For Get',
-      email: generateUniqueEmail(),
-      password: 'passwordForGet',
-    };
+    it('should return a single user by ID', async () => {
+      const res = await request(app).get(`/users/${createdUserId}`);
 
-    beforeAll(async () => {
-      const res = await request(app).post('/users').send(userToCreate);
-      userIdForGet = res.body.id;
-    });
-
-    afterAll(async () => {
-      await request(app).delete(`/users/${userIdForGet}`);
-    });
-
-    it('should return a user by ID successfully with status 200', async () => {
-      const res = await request(app).get(`/users/${userIdForGet}`);
-      expect(res.statusCode).toEqual(200);
-      expect(res.body).toHaveProperty('id', userIdForGet);
-      expect(res.body.name).toEqual(userToCreate.name);
-      expect(res.body.email).toEqual(userToCreate.email);
+      expect(res.statusCode).toBe(200);
+      expect(res.body).toHaveProperty('id', createdUserId);
+      expect(res.body).toHaveProperty('name', 'Test User');
+      expect(res.body).toHaveProperty('email', 'testuser@example.com');
       expect(res.body).not.toHaveProperty('password');
     });
 
-    it('should return 404 if user ID is not found', async () => {
-      const nonExistentId = '60e0a9d1d1f0d3a0c8b45678'; // Example non-existent ID
+    it('should return 404 if user ID does not exist', async () => {
+      const nonExistentId = '60b0d6b5e6f3b7001c8c9c9c'; // A valid-looking but non-existent ID
+
       const res = await request(app).get(`/users/${nonExistentId}`);
-      expect(res.statusCode).toEqual(404);
-      expect(res.body).toHaveProperty(
-        'message',
-        `User with ID ${nonExistentId} not found`
-      );
+
+      expect(res.statusCode).toBe(404);
+      expect(res.body).toHaveProperty('message');
+      expect(res.body.message).toMatch(/user not found/i);
     });
 
-    it('should return 400 if ID format is invalid', async () => {
-      const invalidId = 'not-a-valid-id';
+    it('should return 400 if user ID is invalid format', async () => {
+      const invalidId = 'invalid-id-format'; // Not a valid MongoDB ObjectId or UUID
+
       const res = await request(app).get(`/users/${invalidId}`);
-      expect(res.statusCode).toEqual(400);
+
+      expect(res.statusCode).toBe(400);
       expect(res.body).toHaveProperty('message');
-      expect(res.body.message).toContain('Invalid user ID format');
+      expect(res.body.message).toMatch(/invalid user id format/i);
     });
   });
 
+  // ---------------------------------------------------------------------------------
+  // PUT /users/:id
+  // ---------------------------------------------------------------------------------
   describe('PUT /users/:id', () => {
-    let userIdForPut: string;
-    const userToCreate = {
-      name: 'User For Put',
-      email: generateUniqueEmail(),
-      password: 'passwordForPut',
+    const updatedUserData = {
+      name: 'Updated Test User',
+      email: 'updated.testuser@example.com',
     };
 
-    beforeAll(async () => {
-      const res = await request(app).post('/users').send(userToCreate);
-      userIdForPut = res.body.id;
-    });
-
-    afterAll(async () => {
-      await request(app).delete(`/users/${userIdForPut}`);
-    });
-
-    it('should update a user successfully with status 200', async () => {
-      const updatedName = 'Updated Name For Put';
-      const updatedEmail = generateUniqueEmail();
-      const updatePayload = {
-        name: updatedName,
-        email: updatedEmail,
-      };
-
+    it('should update an existing user successfully', async () => {
       const res = await request(app)
-        .put(`/users/${userIdForPut}`)
-        .send(updatePayload);
+        .put(`/users/${createdUserId}`)
+        .send(updatedUserData);
 
-      expect(res.statusCode).toEqual(200);
-      expect(res.body).toHaveProperty('id', userIdForPut);
-      expect(res.body.name).toEqual(updatedName);
-      expect(res.body.email).toEqual(updatedEmail);
-      expect(res.body).not.toHaveProperty('password'); // Password should not be returned
-
-      // Verify by fetching the user again
-      const getRes = await request(app).get(`/users/${userIdForPut}`);
-      expect(getRes.statusCode).toEqual(200);
-      expect(getRes.body.name).toEqual(updatedName);
-      expect(getRes.body.email).toEqual(updatedEmail);
+      expect(res.statusCode).toBe(200);
+      expect(res.body).toHaveProperty('id', createdUserId);
+      expect(res.body.name).toBe(updatedUserData.name);
+      expect(res.body.email).toBe(updatedUserData.email);
+      expect(res.body).not.toHaveProperty('password');
+      expect(new Date(res.body.updatedAt).getTime()).toBeGreaterThan(
+        new Date(res.body.createdAt).getTime()
+      ); // Should reflect update
     });
 
-    it('should return 404 if user to update is not found', async () => {
-      const nonExistentId = '60e0a9d1d1f0d3a0c8b45679';
-      const updatePayload = { name: 'Non Existent Update' };
+    it('should return 404 if user ID to update does not exist', async () => {
+      const nonExistentId = '60b0d6b5e6f3b7001c8c9c9d';
 
       const res = await request(app)
         .put(`/users/${nonExistentId}`)
-        .send(updatePayload);
+        .send(updatedUserData);
 
-      expect(res.statusCode).toEqual(404);
-      expect(res.body).toHaveProperty(
-        'message',
-        `User with ID ${nonExistentId} not found`
-      );
+      expect(res.statusCode).toBe(404);
+      expect(res.body).toHaveProperty('message');
+      expect(res.body.message).toMatch(/user not found/i);
     });
 
-    it('should return 400 if update payload contains invalid email format', async () => {
-      const invalidUpdatePayload = {
-        email: 'not-an-email-for-update',
+    it('should return 400 if user ID is invalid format', async () => {
+      const invalidId = 'invalid-update-id';
+
+      const res = await request(app)
+        .put(`/users/${invalidId}`)
+        .send(updatedUserData);
+
+      expect(res.statusCode).toBe(400);
+      expect(res.body).toHaveProperty('message');
+      expect(res.body.message).toMatch(/invalid user id format/i);
+    });
+
+    it('should return 400 if trying to update with invalid data (e.g., empty name)', async () => {
+      const invalidUpdate = {
+        name: '', // Empty name
+        email: 'valid@example.com',
       };
 
       const res = await request(app)
-        .put(`/users/${userIdForPut}`)
-        .send(invalidUpdatePayload);
+        .put(`/users/${createdUserId}`)
+        .send(invalidUpdate);
 
-      expect(res.statusCode).toEqual(400);
+      expect(res.statusCode).toBe(400);
       expect(res.body).toHaveProperty('message');
-      expect(res.body.message).toContain('email must be a valid email');
+      expect(res.body.message).toMatch(/name cannot be empty/i);
+    });
+
+    it('should return 400 if trying to update email to an already existing email', async () => {
+      const duplicateEmailUpdate = {
+        email: 'anotheruser@example.com', // Email of `anotherUserId`
+      };
+
+      const res = await request(app)
+        .put(`/users/${createdUserId}`)
+        .send(duplicateEmailUpdate);
+
+      expect(res.statusCode).toBe(400); // Or 409 Conflict
+      expect(res.body).toHaveProperty('message');
+      expect(res.body.message).toMatch(/email already exists/i);
     });
   });
 
+  // ---------------------------------------------------------------------------------
+  // DELETE /users/:id
+  // ---------------------------------------------------------------------------------
   describe('DELETE /users/:id', () => {
-    let userIdForDelete: string;
-    const userToCreate = {
-      name: 'User For Delete',
-      email: generateUniqueEmail(),
-      password: 'passwordForDelete',
-    };
+    it('should delete a user successfully', async () => {
+      const res = await request(app).delete(`/users/${createdUserId}`);
 
-    beforeEach(async () => {
-      // Use beforeEach to ensure a fresh user for each test in this suite
-      const res = await request(app).post('/users').send(userToCreate);
-      userIdForDelete = res.body.id;
+      expect(res.statusCode).toBe(204); // No Content
+      expect(res.body).toEqual({}); // Empty body for 204
+
+      // Verify it's actually deleted by trying to GET it
+      const getRes = await request(app).get(`/users/${createdUserId}`);
+      expect(getRes.statusCode).toBe(404);
     });
 
-    it('should delete a user successfully with status 204', async () => {
-      const res = await request(app).delete(`/users/${userIdForDelete}`);
-      expect(res.statusCode).toEqual(204); // No Content
+    it('should return 404 if user ID to delete does not exist', async () => {
+      const nonExistentId = '60b0d6b5e6f3b7001c8c9c9e';
 
-      // Verify the user is actually deleted
-      const getRes = await request(app).get(`/users/${userIdForDelete}`);
-      expect(getRes.statusCode).toEqual(404);
-    });
-
-    it('should return 404 if user to delete is not found', async () => {
-      const nonExistentId = '60e0a9d1d1f0d3a0c8b45680';
       const res = await request(app).delete(`/users/${nonExistentId}`);
-      expect(res.statusCode).toEqual(404);
-      expect(res.body).toHaveProperty(
-        'message',
-        `User with ID ${nonExistentId} not found`
-      );
+
+      expect(res.statusCode).toBe(404);
+      expect(res.body).toHaveProperty('message');
+      expect(res.body.message).toMatch(/user not found/i);
     });
 
-    it('should return 400 if ID format is invalid for deletion', async () => {
+    it('should return 400 if user ID is invalid format', async () => {
       const invalidId = 'invalid-delete-id';
+
       const res = await request(app).delete(`/users/${invalidId}`);
-      expect(res.statusCode).toEqual(400);
+
+      expect(res.statusCode).toBe(400);
       expect(res.body).toHaveProperty('message');
-      expect(res.body.message).toContain('Invalid user ID format');
+      expect(res.body.message).toMatch(/invalid user id format/i);
     });
+  });
+
+  // Clean up created users if necessary
+  afterAll(async () => {
+    // Ensure the other user created during tests is also deleted
+    if (anotherUserId) {
+      await request(app).delete(`/users/${anotherUserId}`);
+    }
   });
 });
